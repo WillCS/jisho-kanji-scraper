@@ -1,34 +1,70 @@
+from dataclasses import dataclass
+from enum import unique
+from typing import List
 import sys
 import requests
 from bs4 import BeautifulSoup, PageElement
+
+@dataclass
+class KanjiDetails:
+    kanji: str
+    meanings: List[str]
+    kunyomi_readings: List[str]
+    onyomi_readings: List[str]
     
 def get_jisho_url(characters: str) -> str:
     return f'https://jisho.org/search/{characters}20%23kanji'
+
+def get_meanings(html: PageElement):
+    container = html.find_next('div', { 'class': 'kanji-details__main-meanings' })
+    meanings = container.text.strip().split(', ')
+    return meanings
+
+def get_onyomi_readings(html: PageElement):
+    readings_section = html.find_next('div', { 'class': 'kanji-details__main-readings' })
+    container = readings_section.find_next('dl', { 'class': 'on_yomi' })
+    list = container.find_next('dd', { 'class': 'kanji-details__main-readings-list' })
+    readings = list.text.strip().split(', ')
+    return readings
+
+def get_kunyomi_readings(html: PageElement):
+    readings_section = html.find_next('div', { 'class': 'kanji-details__main-readings' })
+    container = readings_section.find_next('dl', { 'class': 'kun_yomi' })
+    list = container.find_next('dd', { 'class': 'kanji-details__main-readings-list' })
+    readings = list.text.strip().split(', ')
+    return readings
 
 def extract_individual_character_from_html(html: PageElement):
     kanji_element = html.find_next('h1', { 'class': 'character'})
     kanji = kanji_element.text
 
-    meanings_element = html.find_next('div', { 'class': 'kanji-details__main-meanings' })
-    meanings = meanings_element.text.strip().split(', ')
-    print(meanings)
+    meanings = get_meanings(html)
+    kunyomi  = get_kunyomi_readings(html)
+    onyomi   = get_onyomi_readings(html)
+
+    return KanjiDetails(kanji, meanings, kunyomi, onyomi)
 
 def extract_character_info_from_html(html: str):
     soup = BeautifulSoup(html, features = 'html.parser')
 
     results_list = soup.find(id = 'result_area')
+    kanji_details = []
     
     for child in results_list.children:
         if child.name == 'div':
-            extract_individual_character_from_html(child)
+            kanji_details.append(extract_individual_character_from_html(child))
 
-def get_character_info(characters: str):
-    print(f'Querying Jisho for characters: {characters}')
+    return kanji_details
 
-    jisho_url = get_jisho_url(characters)
+def get_character_info(characters: List[str]):
+    character_string = ''.join(characters)
+
+    print(f'Querying Jisho for characters: {character_string}')
+
+    jisho_url = get_jisho_url(character_string)
     try:
         response = requests.get(jisho_url)
-        extract_character_info_from_html(response.content)
+        return extract_character_info_from_html(response.content)
     except ConnectionError as e:    
         print(f'Failed to GET {jisho_url}')
     
@@ -40,7 +76,9 @@ def process_file(filename: str):
         for char in stripped_line:
             unique_chars.add(char)
 
-    get_character_info(''.join(unique_chars))
+    kanji_details = get_character_info(unique_chars)
+
+    print(kanji_details)
 
 args = sys.argv
 
