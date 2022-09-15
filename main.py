@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from distutils.command.upload import upload
 from enum import unique
+from inspect import Attribute
 from typing import Collection, List
 import sys
 import requests
@@ -27,17 +28,23 @@ def get_meanings(html: PageElement) -> List[str]:
 
 def get_onyomi_readings(html: PageElement) -> List[str]:
     readings_section = html.find_next('div', { 'class': 'kanji-details__main-readings' })
-    container = readings_section.find_next('dl', { 'class': 'on_yomi' })
-    list = container.find_next('dd', { 'class': 'kanji-details__main-readings-list' })
-    readings = list.text.strip().split(', ')
-    return readings
+    try:
+        container = readings_section.find_next('dl', { 'class': 'on_yomi' })
+        list = container.find_next('dd', { 'class': 'kanji-details__main-readings-list' })
+        readings = list.text.strip().split(', ')
+        return readings
+    except AttributeError as e:
+        return []
 
 def get_kunyomi_readings(html: PageElement) -> List[str]:
     readings_section = html.find_next('div', { 'class': 'kanji-details__main-readings' })
-    container = readings_section.find_next('dl', { 'class': 'kun_yomi' })
-    list = container.find_next('dd', { 'class': 'kanji-details__main-readings-list' })
-    readings = list.text.strip().split(', ')
-    return readings
+    try:
+        container = readings_section.find_next('dl', { 'class': 'kun_yomi' })
+        list = container.find_next('dd', { 'class': 'kanji-details__main-readings-list' })
+        readings = list.text.strip().split(', ')
+        return readings
+    except AttributeError as e:
+        return []
 
 def extract_individual_character_from_html(html: PageElement) -> KanjiDetails:
     kanji_element = html.find_next('h1', { 'class': 'character'})
@@ -54,10 +61,14 @@ def extract_character_info_from_html(html: str) -> List[KanjiDetails]:
 
     results_list = soup.find(id = 'result_area')
     kanji_details = []
-    
-    for child in results_list.children:
-        if child.name == 'div':
-            kanji_details.append(extract_individual_character_from_html(child))
+
+    try:
+        for child in results_list.children:
+            if child.name == 'div':
+                kanji_details.append(extract_individual_character_from_html(child))
+    except AttributeError as e:
+        print('An error occurred while parsing HTML. Exiting.')
+        exit(1)
 
     return kanji_details
 
@@ -81,7 +92,20 @@ def process_file(filename: str) -> List[KanjiDetails]:
         for char in stripped_line:
             unique_chars.add(char)
 
-    return query_jisho_for_characters(unique_chars)
+    unique_chars = list(unique_chars)
+    subsets = []
+
+    while len(unique_chars) > 0:
+        upper_limit = min([20, len(unique_chars)])
+        subsets.append(unique_chars[:upper_limit])
+        unique_chars = unique_chars[upper_limit:]
+
+    kanji_details = []
+
+    for subset in subsets:
+        kanji_details.extend(query_jisho_for_characters(subset))
+
+    return kanji_details
 
 def create_ankiconnect_request(action: str, **params) -> str:
     return json.dumps({ 
