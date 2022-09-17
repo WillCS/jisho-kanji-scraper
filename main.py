@@ -1,7 +1,4 @@
 from dataclasses import dataclass
-from distutils.command.upload import upload
-from enum import unique
-from inspect import Attribute
 from typing import Collection, List
 import sys
 import requests
@@ -13,10 +10,11 @@ NOTE_MODEL_NAME = 'Kanji'
 
 @dataclass
 class KanjiDetails:
-    kanji: str
+    kanji:    str
     meanings: List[str]
-    kunyomi_readings: List[str]
-    onyomi_readings: List[str]
+    radical:  str
+    kunyomi:  List[str]
+    onyomi:   List[str]
     
 def get_jisho_url(characters: str) -> str:
     return f'https://jisho.org/search/{characters}20%23kanji'
@@ -26,7 +24,7 @@ def get_meanings(html: PageElement) -> List[str]:
     meanings = container.text.strip().split(', ')
     return meanings
 
-def get_onyomi_readings(html: PageElement) -> List[str]:
+def get_onyomi(html: PageElement) -> List[str]:
     readings_section = html.find_next('div', { 'class': 'kanji-details__main-readings' })
     try:
         container = readings_section.find_next('dl', { 'class': 'on_yomi' })
@@ -36,7 +34,7 @@ def get_onyomi_readings(html: PageElement) -> List[str]:
     except AttributeError as e:
         return []
 
-def get_kunyomi_readings(html: PageElement) -> List[str]:
+def get_kunyomi(html: PageElement) -> List[str]:
     readings_section = html.find_next('div', { 'class': 'kanji-details__main-readings' })
     try:
         container = readings_section.find_next('dl', { 'class': 'kun_yomi' })
@@ -46,15 +44,24 @@ def get_kunyomi_readings(html: PageElement) -> List[str]:
     except AttributeError as e:
         return []
 
+def get_radical(html: PageElement) -> str:
+    try:
+        radical_section = html.find_next('div', { 'class': 'radicals' })
+        radical_text = radical_section.find_next('span')
+        return radical_text.text.strip()
+    except:
+        return 'None'
+
 def extract_individual_character_from_html(html: PageElement) -> KanjiDetails:
     kanji_element = html.find_next('h1', { 'class': 'character'})
     kanji = kanji_element.text
 
     meanings = get_meanings(html)
-    kunyomi  = get_kunyomi_readings(html)
-    onyomi   = get_onyomi_readings(html)
+    kunyomi  = get_kunyomi(html)
+    onyomi   = get_onyomi(html)
+    radical  = get_radical(html)
 
-    return KanjiDetails(kanji, meanings, kunyomi, onyomi)
+    return KanjiDetails(kanji, meanings, radical, kunyomi, onyomi)
 
 def extract_character_info_from_html(html: str) -> List[KanjiDetails]:
     soup = BeautifulSoup(html, features = 'html.parser')
@@ -132,10 +139,11 @@ def convert_kanji_to_note(kanji: KanjiDetails, deck_name: str) -> object:
         'deckName': deck_name,
         'modelName': NOTE_MODEL_NAME,
         'fields': {
-            'Kanji':            kanji.kanji,
-            'Meanings':         ', '.join(kanji.meanings),
-            'Kunyomi Readings': ', '.join(kanji.kunyomi_readings),
-            'Onyomi Readings':  ', '.join(kanji.onyomi_readings)
+            'Kanji':    kanji.kanji,
+            'Radical':  kanji.radical,
+            'Meanings': ', '.join(kanji.meanings),
+            'Kunyomi':  ', '.join(kanji.kunyomi),
+            'Onyomi':   ', '.join(kanji.onyomi)
         }
     }
 
