@@ -74,8 +74,8 @@ def extract_character_info_from_html(html: str) -> List[KanjiDetails]:
             if child.name == 'div':
                 kanji_details.append(extract_individual_character_from_html(child))
     except AttributeError as e:
-        print('An error occurred while parsing HTML. Exiting.')
-        exit(1)
+        print('An error occurred while parsing HTML.')
+        raise e
 
     return kanji_details
 
@@ -90,6 +90,7 @@ def query_jisho_for_characters(characters: Collection[str]) -> List[KanjiDetails
         return extract_character_info_from_html(response.content)
     except ConnectionError as e:    
         print(f'Failed to GET {jisho_url}')
+        return []
     
 def process_file(filename: str) -> List[KanjiDetails]:
     unique_chars = set()
@@ -110,7 +111,15 @@ def process_file(filename: str) -> List[KanjiDetails]:
     kanji_details = []
 
     for subset in subsets:
-        kanji_details.extend(query_jisho_for_characters(subset))
+        new_kanji = []
+        while True:
+            try:
+                new_kanji = query_jisho_for_characters(subset)
+                break
+            except:
+                print("Retrying.")
+        
+        kanji_details.extend(new_kanji)
 
     return kanji_details
 
